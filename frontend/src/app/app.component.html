@@ -1,0 +1,335 @@
+<main>
+  <section class="hero">
+    <h1>🔍 AccesAudit</h1>
+    <p>Auditoría de accesibilidad web con análisis automático y manual combinados</p>
+  </section>
+
+  <section class="card">
+    <form (submit)="runAudit(); $event.preventDefault();" class="audit-form">
+      <div class="form-group">
+        <label for="url">URL del sitio a auditar</label>
+        <input id="url" type="url" [(ngModel)]="auditUrl" name="auditUrl" placeholder="https://example.com" required />
+      </div>
+      <button type="submit" [disabled]="loading" class="btn-primary">
+        {{ loading ? '⏳ Auditando...' : '🚀 Auditar' }}
+      </button>
+    </form>
+
+    <div class="status-message" *ngIf="error">
+      <span class="error">❌ {{ error }}</span>
+    </div>
+  </section>
+
+  <!-- Dashboard Mejorado -->
+  <section class="card dashboard">
+    <div class="section-header">
+      <h2>📊 Dashboard Comparativo</h2>
+      <p class="subtitle">Análisis general de auditorías realizadas</p>
+    </div>
+
+    <div *ngIf="reportsCount === 0" class="empty-state">
+      <p>📭 No hay auditorías registradas aún. ¡Realiza tu primera auditoría!</p>
+    </div>
+
+    <div *ngIf="reportsCount > 0">
+      <div class="metrics-grid">
+        <div class="metric-card metric-primary">
+          <div class="metric-value">{{ reportsCount }}</div>
+          <div class="metric-label">Sitios Auditados</div>
+        </div>
+        <div class="metric-card metric-success">
+          <div class="metric-value">{{ averagePassRate }}%</div>
+          <div class="metric-label">Promedio Conformidad</div>
+        </div>
+        <div class="metric-card metric-info" *ngIf="bestSite">
+          <div class="metric-label">✅ Mejor Sitio</div>
+          <div class="metric-detail">{{ bestSite.summary.conformanceLevel }}</div>
+        </div>
+        <div class="metric-card metric-warning" *ngIf="worstSite">
+          <div class="metric-label">⚠️ Sitio con más problemas</div>
+          <div class="metric-detail">{{ worstSite.summary.conformanceLevel }}</div>
+        </div>
+      </div>
+
+      <div class="table-wrapper">
+        <table class="reports-table">
+          <thead>
+            <tr>
+              <th>Sitio</th>
+              <th>Fecha</th>
+              <th>Conformidad</th>
+              <th colspan="4">Violaciones por Impacto</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr *ngFor="let history of reports">
+              <td class="site-cell" title="{{ history.url }}">{{ history.url }}</td>
+              <td>{{ history.timestamp | date:'short' }}</td>
+              <td><strong class="conformance" [ngClass]="'level-' + history.summary.conformanceLevel.toLowerCase()">{{ history.summary.conformanceLevel }}</strong> <span class="pass-rate">({{ history.summary.passRate }}%)</span></td>
+              <td><span class="pill pill-critical">{{ history.summary.levelCounts.critical }}</span></td>
+              <td><span class="pill pill-serious">{{ history.summary.levelCounts.serious }}</span></td>
+              <td><span class="pill pill-moderate">{{ history.summary.levelCounts.moderate }}</span></td>
+              <td><span class="pill pill-minor">{{ history.summary.levelCounts.minor }}</span></td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+
+      <button type="button" (click)="clearHistory()" class="btn-secondary">🗑️ Limpiar historial</button>
+    </div>
+  </section>
+
+  <!-- Tabs principal -->
+  <section *ngIf="report" class="card tabs-section">
+    <div class="tabs-header">
+      <button 
+        class="tab-button" 
+        [class.active]="activeTab === 'report'"
+        (click)="setActiveTab('report')">
+        📋 Reporte
+      </button>
+      <button 
+        class="tab-button" 
+        [class.active]="activeTab === 'recommendations'"
+        (click)="setActiveTab('recommendations')">
+        💡 Recomendaciones ({{ recommendations.length }})
+      </button>
+      <button 
+        class="tab-button" 
+        [class.active]="activeTab === 'discrepancies'"
+        (click)="setActiveTab('discrepancies')">
+        🔄 Discrepancias ({{ discrepancies.length }})
+      </button>
+      <button 
+        class="tab-button" 
+        [class.active]="activeTab === 'comparison'"
+        (click)="setActiveTab('comparison')">
+        📊 Comparación
+      </button>
+    </div>
+
+    <!-- Tab: Reporte -->
+    <div class="tab-content" *ngIf="activeTab === 'report'">
+      <div class="report-header">
+        <div class="report-header-top">
+          <div>
+            <h3>Reporte de Auditoría</h3>
+            <p class="report-meta">{{ report.url }} · {{ report.timestamp | date:'medium' }}</p>
+          </div>
+          <button (click)="downloadPdf()" class="btn-download-pdf" title="Descargar reporte en PDF">
+            📥 Descargar PDF
+          </button>
+        </div>
+      </div>
+
+      <div class="impact-grid">
+        <div class="impact-card critical">
+          <div class="impact-icon">🔴</div>
+          <div class="impact-value">{{ criticalViolations }}</div>
+          <div class="impact-label">Crítico</div>
+        </div>
+        <div class="impact-card serious">
+          <div class="impact-icon">🟠</div>
+          <div class="impact-value">{{ seriousViolations }}</div>
+          <div class="impact-label">Serio</div>
+        </div>
+        <div class="impact-card moderate">
+          <div class="impact-icon">🟡</div>
+          <div class="impact-value">{{ moderateViolations }}</div>
+          <div class="impact-label">Moderado</div>
+        </div>
+        <div class="impact-card minor">
+          <div class="impact-icon">🔵</div>
+          <div class="impact-value">{{ minorViolations }}</div>
+          <div class="impact-label">Menor</div>
+        </div>
+      </div>
+
+      <div class="conformance-card">
+        <h4>Nivel de Conformidad Estimado</h4>
+        <div class="conformance-badge" [ngClass]="'level-' + report.summary.conformanceLevel.toLowerCase()">
+          {{ report.summary.conformanceLevel }}
+        </div>
+        <p class="conformance-rate">{{ report.summary.passRate }}% de reglas pasadas</p>
+      </div>
+
+      <section class="violations-section" *ngIf="report.violations.length > 0">
+        <h4>🚨 Violaciones Encontradas</h4>
+        <div class="violations-list">
+          <div *ngFor="let violation of report.violations" class="violation-card">
+            <div class="violation-header">
+              <span class="violation-id">{{ violation.id }}</span>
+              <span class="violation-impact" [ngStyle]="{ backgroundColor: getImpactColor(violation.impact) }">
+                {{ violation.impact }}
+              </span>
+            </div>
+            <p class="violation-help">{{ violation.help }}</p>
+            <p class="violation-description">{{ violation.description }}</p>
+            <p class="violation-nodes">📌 Afecta {{ violation.nodes.length }} elemento(s)</p>
+          </div>
+        </div>
+      </section>
+
+      <div class="success" *ngIf="report.violations.length === 0">
+        <p>✅ No se encontraron violaciones de accesibilidad. ¡Excelente!</p>
+      </div>
+
+      <section class="criteria-section">
+        <h4>✅ Auditoría WCAG ({{ report.criteria.length }} criterios)</h4>
+        <div class="criteria-summary">
+          <span class="criteria-stat passed">
+            ✓ Pasados: {{ getPassedCriteriaCount() }}
+          </span>
+          <span class="criteria-stat failed">
+            ✗ Fallidos: {{ getFailedCriteriaCount() }}
+          </span>
+          <span class="criteria-stat manual">
+            ? Manuales: {{ getManualCriteriaCount() }}
+          </span>
+        </div>
+      </section>
+    </div>
+
+    <!-- Tab: Recomendaciones -->
+    <div class="tab-content" *ngIf="activeTab === 'recommendations'">
+      <h3>💡 Recomendaciones Priorizadas</h3>
+      <p class="tab-subtitle">Ordenadas por impacto y facilidad de implementación</p>
+
+      <div *ngIf="recommendations.length === 0" class="empty-state">
+        <p>✅ ¡Sin recomendaciones! El sitio es accesible.</p>
+      </div>
+
+      <div *ngIf="recommendations.length > 0" class="recommendations-list">
+        <div *ngFor="let rec of recommendations" class="recommendation-card">
+          <div class="rec-header">
+            <div class="rec-title">{{ rec.title }}</div>
+            <div class="rec-badges">
+              <span class="badge-priority" [ngStyle]="{ backgroundColor: getImpactColor(rec.impact) }">
+                Prioridad: {{ rec.priorityScore }}/100
+              </span>
+            </div>
+          </div>
+          
+          <div class="rec-meta">
+            <span class="rec-meta-item">
+              <strong>Impacto:</strong>
+              <span class="impact-tag" [style.color]="getImpactColor(rec.impact)">{{ rec.impact }}</span>
+            </span>
+            <span class="rec-meta-item">
+              <strong>Dificultad:</strong>
+              <span class="difficulty-tag" [style.color]="getDifficultyColor(rec.difficulty)">{{ rec.difficulty }}</span>
+            </span>
+            <span class="rec-meta-item">
+              <strong>⏱️ Tiempo est.:</strong> {{ rec.estimatedTimeMinutes }} min
+            </span>
+            <span class="rec-meta-item">
+              <strong>Criterio:</strong> {{ rec.affectedCriterionId }}
+            </span>
+          </div>
+
+          <p class="rec-description">{{ rec.description }}</p>
+
+          <details class="rec-actions">
+            <summary>📝 Ver acciones recomendadas ({{ rec.actions.length }})</summary>
+            <ul>
+              <li *ngFor="let action of rec.actions">{{ action }}</li>
+            </ul>
+          </details>
+        </div>
+      </div>
+    </div>
+
+    <!-- Tab: Discrepancias -->
+    <div class="tab-content" *ngIf="activeTab === 'discrepancies'">
+      <h3>🔄 Discrepancias Encontradas</h3>
+      <p class="tab-subtitle">Diferencias entre análisis automático y verificación manual</p>
+
+      <div class="checklist-section">
+        <h4>📋 Marque los criterios confirmados manualmente</h4>
+        <div class="checklist">
+          <div *ngFor="let check of manualChecks" class="checklist-item">
+            <label>
+              <input type="checkbox" [(ngModel)]="check.passed" />
+              <div class="check-content">
+                <strong>{{ check.label }}</strong>
+                <span class="check-badge" *ngIf="check.autoVerification">{{ check.autoVerification }}</span>
+                <p>{{ check.description }}</p>
+              </div>
+            </label>
+          </div>
+        </div>
+        <div class="checklist-actions">
+          <p><strong>Resultado Manuel:</strong> {{ manualScore }}%</p>
+          <button (click)="calculateDiscrepancies()" class="btn-primary">
+            🔍 Analizar Discrepancias
+          </button>
+        </div>
+      </div>
+
+      <div *ngIf="discrepancies.length > 0" class="discrepancies-list">
+        <h4>⚠️ Discrepancias Detectadas ({{ discrepancies.length }})</h4>
+        <div *ngFor="let disc of discrepancies" class="discrepancy-card">
+          <div class="disc-header">
+            <strong>{{ disc.criterionId }}: {{ disc.criterionDescription }}</strong>
+            <span class="disc-type" [ngClass]="'type-' + (disc.discrepancyType || 'unknown')">
+              {{ getDiscrepancyLabel(disc.discrepancyType) }}
+            </span>
+          </div>
+          <div class="disc-results">
+            <p><strong>Análisis Automático:</strong> <span class="status" [ngClass]="'status-' + disc.automaticResult">{{ disc.automaticResult }}</span></p>
+            <p><strong>Verificación Manual:</strong> <span class="status" [ngClass]="'status-' + (disc.manualResult || 'unknown')">{{ disc.manualResult || 'No verificado' }}</span></p>
+          </div>
+        </div>
+      </div>
+
+      <div *ngIf="discrepancies.length === 0 && hasDiscrepanciesNotAnalyzed()" class="success">
+        <p>✅ No hay discrepancias. Los análisis automático y manual coinciden.</p>
+      </div>
+    </div>
+
+    <!-- Tab: Comparación -->
+    <div class="tab-content" *ngIf="activeTab === 'comparison'">
+      <h3>📊 Gráfico Comparativo de Accesibilidad</h3>
+      <p class="tab-subtitle">Visualización de la conformidad de accesibilidad entre sitios auditados</p>
+
+      <div *ngIf="reports.length === 0" class="empty-state">
+        <p>📭 No hay datos para comparar. Realiza al menos una auditoría.</p>
+      </div>
+
+      <div *ngIf="reports.length > 0" class="chart-container">
+        <canvas baseChart
+                [data]="barChartData"
+                [options]="barChartOptions"
+                [type]="barChartType">
+        </canvas>
+      </div>
+
+      <div *ngIf="reports.length > 1" class="comparison-insights">
+        <h4>🔍 Insights de Comparación</h4>
+        <div class="insights-grid">
+          <div class="insight-card">
+            <div class="insight-icon">📈</div>
+            <div class="insight-content">
+              <strong>Rango de Conformidad:</strong>
+              <p>{{ (reports[reports.length - 1]?.summary.passRate || 0).toFixed(1) }}% - {{ (reports[0]?.summary.passRate || 0).toFixed(1) }}%</p>
+            </div>
+          </div>
+          <div class="insight-card">
+            <div class="insight-icon">🎯</div>
+            <div class="insight-content">
+              <strong>Mejor Desempeño:</strong>
+              <p>{{ getBestSiteName() }} ({{ (bestSite?.summary.passRate || 0).toFixed(1) }}%)</p>
+            </div>
+          </div>
+          <div class="insight-card">
+            <div class="insight-icon">⚠️</div>
+            <div class="insight-content">
+              <strong>Área de Mejora:</strong>
+              <p>{{ getWorstSiteName() }} ({{ (worstSite?.summary.passRate || 0).toFixed(1) }}%)</p>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+</main>
